@@ -9,7 +9,6 @@ The challenge was to use build your own Load Balancer. Capabilities -
 
 Steps to build the binary and execute it -
 ```
-go build -o wc-tool ./cmd/main.go
 ```
 
 ## Flags
