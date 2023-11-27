@@ -42,7 +42,7 @@ func main() {
 	flag.Parse()
 	if *isLoadBalancer {
 		servers := ParseEndpoints()
-		lb.NewLB(servers, *port).Start()
+		lb.NewRateLimitedLB(servers, *port).Start()
 	} else {
 		be.NewBE(*port).Start()
 	}

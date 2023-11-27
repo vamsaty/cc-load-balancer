@@ -1,6 +1,7 @@
 package lb
 
 import (
+	"github.com/vamsaty/cc-rate-limiter/factory"
 	"go.uber.org/zap"
 	"log"
 	"net/http"
@@ -33,6 +34,9 @@ type LB struct {
 	Host string // host to listen on
 	Port int    // port to listen on
 	*zap.Logger
+
+	// integrate custom rate limiter
+	Limiter factory.RateLimiter
 }
 
 func (lb *LB) Address() string {
@@ -102,6 +106,13 @@ func (lb *LB) ForwardRequest(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Load Balancer is not ready yet"))
 		return
 	}
+
+	if lb.Limiter.CanLimit(r.Host) != nil {
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte("Too many requests"))
+		return
+	}
+
 	server := lb.GetNextServer()
 	if server == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -150,9 +161,25 @@ func NewLB(servers []*Endpoint, port int) *LB {
 			healthInterval:  5 * time.Second,
 			recheckInterval: 2 * time.Second,
 		},
-		wg:     &sync.WaitGroup{},
-		Logger: logger,
-		index:  0,
-		Port:   port,
+		wg:      &sync.WaitGroup{},
+		Logger:  logger,
+		index:   0,
+		Port:    port,
+		Limiter: factory.NewRateLimiter(factory.NoLimitAlgo, nil),
 	}
+}
+
+func NewRateLimitedLB(servers []*Endpoint, port int) *LB {
+	lb := NewLB(servers, port)
+	lb.Limiter = factory.NewRateLimiter(factory.TokenBucket, map[string]string{
+		"bucket_capacity":     "10",
+		"token_push_interval": "1s",
+	})
+	return lb
+}
+
+func NewRateLimitedLBWithConfig(servers []*Endpoint, port int, config map[string]string) *LB {
+	lb := NewLB(servers, port)
+	lb.Limiter = factory.NewRateLimiter(factory.TokenBucket, config)
+	return lb
 }
