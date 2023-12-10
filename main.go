@@ -9,11 +9,12 @@ import (
 )
 
 var (
-	isLoadBalancer = flag.Bool("lb", false, "is load balancer")
-	endpoints      = flag.String("lb-endpoints", "", "load balancer port")
+	isLoadBalancer = flag.Bool("lb", false, "Indicates if this binary runs as a load balancer or backend server")
+	endpoints      = flag.String("lb-endpoints", "", "comma separated list of endpoints. eg: localhost:8080,localhost:8081")
 	port           = flag.Int("port", 80, "load balancer port")
 )
 
+// GetHostPort returns the host and port from the string
 func GetHostPort(s string) (string, int) {
 	parts := strings.Split(s, ":")
 	if len(parts) == 2 {
@@ -24,6 +25,7 @@ func GetHostPort(s string) (string, int) {
 	return "localhost", 8080 // default
 }
 
+// ParseEndpoints parses the comma separated list of endpoints into host:port pairs
 func ParseEndpoints() []*lb.Endpoint {
 	endPoints := strings.Split(*endpoints, ",")
 	if len(endPoints) == 0 {

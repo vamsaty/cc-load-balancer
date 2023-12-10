@@ -18,7 +18,8 @@ func (s *stats) IncRequestCount()   { s.requestCount++ }
 func (s *stats) IncHealthyCount()   { s.healthyCount++ }
 func (s *stats) IncUnhealthyCount() { s.unhealthyCount++ }
 
-// Endpoint represents a backend server for Loadbalancer
+// Endpoint represents a backend server for Loadbalancer,
+// responsible for making health checks
 type Endpoint struct {
 	Host     string
 	Protocol string
@@ -53,7 +54,7 @@ func (ep *Endpoint) HealthCheck() bool {
 			return true
 		}
 	}
-	ep.IncUnhealthyCount()
+	ep.IncUnhealthyCount() // update metrics
 	return false
 }
 

@@ -8,15 +8,17 @@ import (
 	"strconv"
 )
 
-// BackendServer is the http server running in the backend.
-// The loadbalancer sends request to this server
+// BackendServer is the http server.
+// The loadbalancer sends request to this server.
 type BackendServer struct {
 	Host string
 	Port int
 }
 
+// Address returns the address of the server as host:port (socket)
 func (s *BackendServer) Address() string { return s.Host + ":" + strconv.Itoa(s.Port) }
 
+// Health returns the health check endpoint
 func (s *BackendServer) Health() string { return s.Address() + "/health" }
 
 func (s *BackendServer) Start() {

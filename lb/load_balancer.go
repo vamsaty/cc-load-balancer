@@ -1,7 +1,8 @@
 package lb
 
 import (
-	"github.com/vamsaty/cc-rate-limiter/factory"
+	"fmt"
+	factory "github.com/vamsaty/cc-rate-limiter/limiter"
 	"go.uber.org/zap"
 	"log"
 	"net/http"
@@ -35,13 +36,11 @@ type LB struct {
 	Port int    // port to listen on
 	*zap.Logger
 
-	// integrate custom rate limiter
+	// integrated custom rate limiter
 	Limiter factory.RateLimiter
 }
 
-func (lb *LB) Address() string {
-	return lb.Host + ":" + strconv.Itoa(lb.Port)
-}
+func (lb *LB) Address() string { return lb.Host + ":" + strconv.Itoa(lb.Port) }
 
 // GetNextServer returns the next (healthy) server to forward the request to
 func (lb *LB) GetNextServer() *Endpoint {
@@ -80,14 +79,14 @@ func (lb *LB) HealthChecker() {
 // healthCheck checks the health of all servers, marks them as healthy/unhealthy.
 func (lb *LB) healthCheck() {
 	for _, server := range lb.servers {
+		lb.wg.Add(1)
 		go lb.updateHealth(server)
 	}
-	lb.wg.Wait()
+	lb.wg.Wait() // wait for all the servers to be checked
 }
 
-// updateHealth makes a call to the health url of endpoint and updates its health
+// updateHealth checks the backend server's health and update the endpoint.
 func (lb *LB) updateHealth(endpoint *Endpoint) {
-	lb.wg.Add(1)
 	defer lb.wg.Done()
 
 	ok := endpoint.HealthCheck()
@@ -101,13 +100,15 @@ func (lb *LB) updateHealth(endpoint *Endpoint) {
 // ForwardRequest forwards the request to the next (healthy) server, if it exists.
 // else response with 503 Service Unavailable.
 func (lb *LB) ForwardRequest(w http.ResponseWriter, r *http.Request) {
+	// check if load balancer is ready to serve
 	if !lb.CanServe {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		w.Write([]byte("Load Balancer is not ready yet"))
 		return
 	}
 
-	if lb.Limiter.CanLimit(r.Host) != nil {
+	fmt.Println("checking if request can be allowed for", r.Host)
+	if lb.Limiter.Allow(r.Host) != nil {
 		w.WriteHeader(http.StatusTooManyRequests)
 		w.Write([]byte("Too many requests"))
 		return
@@ -161,17 +162,20 @@ func NewLB(servers []*Endpoint, port int) *LB {
 			healthInterval:  5 * time.Second,
 			recheckInterval: 2 * time.Second,
 		},
-		wg:      &sync.WaitGroup{},
-		Logger:  logger,
-		index:   0,
-		Port:    port,
-		Limiter: factory.NewRateLimiter(factory.NoLimitAlgo, nil),
+		wg:     &sync.WaitGroup{},
+		Logger: logger,
+		index:  0,
+		Port:   port,
+		Limiter: factory.NewRateLimiterFromConfig(map[string]string{
+			"algo": "dummy",
+		}),
 	}
 }
 
 func NewRateLimitedLB(servers []*Endpoint, port int) *LB {
 	lb := NewLB(servers, port)
-	lb.Limiter = factory.NewRateLimiter(factory.TokenBucket, map[string]string{
+	lb.Limiter = factory.NewRateLimiterFromConfig(map[string]string{
+		"algo":                "token_bucket",
 		"bucket_capacity":     "10",
 		"token_push_interval": "1s",
 	})
@@ -180,6 +184,6 @@ func NewRateLimitedLB(servers []*Endpoint, port int) *LB {
 
 func NewRateLimitedLBWithConfig(servers []*Endpoint, port int, config map[string]string) *LB {
 	lb := NewLB(servers, port)
-	lb.Limiter = factory.NewRateLimiter(factory.TokenBucket, config)
+	lb.Limiter = factory.NewRateLimiterFromConfig(config)
 	return lb
 }
